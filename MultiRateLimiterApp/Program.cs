@@ -11,23 +11,27 @@ namespace MultiRateLimiterApp
                 new List<RateLimitConfig>
                 {
                     new RateLimitConfig { Limit = 1, Window = TimeSpan.FromSeconds(1) },
-                    new RateLimitConfig { Limit = 5, Window = TimeSpan.FromSeconds(10) }
+                    new RateLimitConfig { Limit = 5, Window = TimeSpan.FromSeconds(11) }
                 });
 
-            for (int i = 1; i <= 10; i++)
+            var tasks = new List<Task>();
+            for (int i = 1; i <= 100; i++)
             {
-                _ = limiter.Perform(i);
-                await Task.Delay(50);
+                tasks.Add(limiter.Perform(i));
             }
 
+            //run all at once to try and find the race visually
+            Console.WriteLine("all tasks called");
+            await Task.WhenAll(tasks);
 
-            Console.WriteLine("all tasks added");
             Console.ReadLine();
         }
-        static Task SomeTask(int number)
+        static async Task SomeTask(int number)
         {
-            Console.WriteLine($"[{DateTime.Now.ToString("HH:mm:ss.fff")}] Task {number} executed");
-            return Task.CompletedTask;
+            Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] Task {number} started");
+            Random rdn = new Random();
+            await Task.Delay(rdn.Next(100,600));
+            Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] Task {number} finished");
         }
     }
 }

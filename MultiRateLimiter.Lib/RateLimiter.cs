@@ -5,6 +5,8 @@
         private readonly Func<TArg, Task> _action;
         private readonly List<RateLimitRule> _rules;
         private readonly object _lockObj = new();
+        private readonly Queue<TArg> _pendingQueue = new();
+        private bool _isProcessing = false;
 
         public RateLimiter(Func<TArg, Task> action, List<RateLimitConfig> configs)
         {
@@ -17,39 +19,66 @@
             }
         }
 
-        public async Task Perform(TArg argument)
+        public Task Perform(TArg argument)
         {
-            // delays execution until it can honor the rate limits
-            while (true)
+            // perform calls now starts the queue procecsssing
+            lock (_lockObj)
             {
-                DateTime now = DateTime.UtcNow;
-                bool allowed = false;
+                _pendingQueue.Enqueue(argument);
 
-                lock (_lockObj)
+                if (!_isProcessing)
                 {
-                    SlideWindow(now);
-                    
-                    if (ComplyWithAllRules(now))
-                    {
-                        foreach (var rule in _rules)
-                        {
-                            rule.TimeStamps.Enqueue(now);
-                        }
-                        allowed = true;
-                    }
+                    _isProcessing = true;
+                    _ = Task.Run(ProcessQueue);
                 }
-
-                // it can honor the rate limits
-                if (allowed)
-                    break;
-
-                //Console.WriteLine($"Task {argument} delayed");
-                await Task.Delay(50); 
             }
 
-            await _action(argument);
+            return Task.CompletedTask;
         }
+        private async Task ProcessQueue()
+        {
+            //run only while there are items in the queue
+            while (true)
+            {
+                TArg nextItem;
+                lock (_lockObj)
+                {
+                    if (_pendingQueue.Count == 0)
+                    {
+                        _isProcessing = false;
+                        return;
+                    }
 
+                    nextItem = _pendingQueue.Dequeue(); 
+                }
+
+                while (true)
+                {
+                    DateTime now = DateTime.UtcNow;
+                    bool allowed = false;
+
+                    lock (_lockObj)
+                    {
+                        SlideWindow(now);
+
+                        if (ComplyWithAllRules(now))
+                        {
+                            foreach (var rule in _rules)
+                            {
+                                rule.TimeStamps.Enqueue(now);
+                            }
+                            allowed = true;
+                        }
+                    }
+                    if (allowed)
+                        break;
+
+                    await Task.Delay(10);
+                }
+
+                await _action(nextItem);
+            }
+        }
 
         private void SlideWindow(DateTime now)
         {
