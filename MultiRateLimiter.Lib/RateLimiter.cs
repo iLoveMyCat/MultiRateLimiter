@@ -73,10 +73,40 @@
                     if (allowed)
                         break;
 
-                    await Task.Delay(10);
+                    TimeSpan wait = GetNextAvailableWait(now);
+                    await Task.Delay(wait);
                 }
 
-                await _action(nextItem);
+                // dont wait for completion simply run, we only preserve the call order
+                _ = _action(nextItem);
+            }
+        }
+        private TimeSpan GetNextAvailableWait(DateTime now)
+        {
+            // calculate how long until its oldest timestamp expires
+            TimeSpan maxWait = new TimeSpan(0);
+
+            foreach (var rule in _rules)
+            {
+                if (rule.TimeStamps.Count < rule.Limit)
+                    continue;
+
+                // oldest in queue
+                DateTime oldest = rule.TimeStamps.Peek();
+                TimeSpan waitForThisRule = (oldest + rule.Window) - now;
+
+                if (waitForThisRule > maxWait)
+                    maxWait = waitForThisRule;
+            }
+
+            // minimum 1ms
+            if(maxWait <= new TimeSpan(0))
+            {
+                return TimeSpan.FromMilliseconds(1);
+            }
+            else
+            {
+                return maxWait;
             }
         }
 

@@ -15,22 +15,29 @@ namespace MultiRateLimiterApp
                 });
 
             var tasks = new List<Task>();
-            for (int i = 1; i <= 100; i++)
+            for (int i = 1; i <= 6; i++)
             {
                 tasks.Add(limiter.Perform(i));
             }
 
             //run all at once to try and find the race visually
             Console.WriteLine("all tasks called");
-            await Task.WhenAll(tasks);
+       
 
+            var tasks2 = new List<Task>();
+            Task.Delay(10000);
+
+            for (int i = 7; i <= 12; i++)
+            {
+                tasks2.Add(limiter.Perform(i));
+            }
             Console.ReadLine();
         }
         static async Task SomeTask(int number)
         {
             Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] Task {number} started");
             Random rdn = new Random();
-            await Task.Delay(rdn.Next(100,600));
+            await Task.Delay(rdn.Next(100,1500));
             Console.WriteLine($"[{DateTime.Now:HH:mm:ss.fff}] Task {number} finished");
         }
     }
